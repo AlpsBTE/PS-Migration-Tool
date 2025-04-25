@@ -30,6 +30,8 @@ public partial class PlotSystemV2Context : DbContext
 
     public virtual DbSet<PlotReview> PlotReviews { get; set; }
 
+    public virtual DbSet<ReviewContainsToggleCriterion> ReviewContainsToggleCriteria { get; set; }
+
     public virtual DbSet<ReviewToggleCriterion> ReviewToggleCriteria { get; set; }
 
     public virtual DbSet<Server> Servers { get; set; }
@@ -183,28 +185,6 @@ public partial class PlotSystemV2Context : DbContext
 
             entity.HasOne(d => d.Plot).WithMany(p => p.PlotReviews).HasConstraintName("plot_review_ibfk_1");
 
-            entity.HasMany(d => d.CriteriaNames).WithMany(p => p.Reviews)
-                .UsingEntity<Dictionary<string, object>>(
-                    "ReviewContainsToggleCriterion",
-                    r => r.HasOne<ReviewToggleCriterion>().WithMany()
-                        .HasForeignKey("CriteriaName")
-                        .HasConstraintName("review_contains_toggle_criteria_ibfk_2"),
-                    l => l.HasOne<PlotReview>().WithMany()
-                        .HasForeignKey("ReviewId")
-                        .HasConstraintName("review_contains_toggle_criteria_ibfk_1"),
-                    j =>
-                    {
-                        j.HasKey("ReviewId", "CriteriaName")
-                            .HasName("PRIMARY")
-                            .HasAnnotation("MySql:IndexPrefixLength", new[] { 0, 0 });
-                        j.ToTable("review_contains_toggle_criteria");
-                        j.HasIndex(new[] { "CriteriaName" }, "criteria_name");
-                        j.IndexerProperty<int>("ReviewId")
-                            .HasColumnType("int(11)")
-                            .HasColumnName("review_id");
-                        j.IndexerProperty<string>("CriteriaName").HasColumnName("criteria_name");
-                    });
-
             entity.HasMany(d => d.Uus).WithMany(p => p.Reviews)
                 .UsingEntity<Dictionary<string, object>>(
                     "BuilderHasReviewNotification",
@@ -228,6 +208,17 @@ public partial class PlotSystemV2Context : DbContext
                             .HasMaxLength(36)
                             .HasColumnName("uuid");
                     });
+        });
+
+        modelBuilder.Entity<ReviewContainsToggleCriterion>(entity =>
+        {
+            entity.HasKey(e => new { e.ReviewId, e.CriteriaName })
+                .HasName("PRIMARY")
+                .HasAnnotation("MySql:IndexPrefixLength", new[] { 0, 0 });
+
+            entity.HasOne(d => d.CriteriaNameNavigation).WithMany(p => p.ReviewContainsToggleCriteria).HasConstraintName("review_contains_toggle_criteria_ibfk_2");
+
+            entity.HasOne(d => d.Review).WithMany(p => p.ReviewContainsToggleCriteria).HasConstraintName("review_contains_toggle_criteria_ibfk_1");
         });
 
         modelBuilder.Entity<ReviewToggleCriterion>(entity =>

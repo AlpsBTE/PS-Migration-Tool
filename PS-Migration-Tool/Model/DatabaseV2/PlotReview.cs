@@ -21,6 +21,9 @@ public partial class PlotReview
     [StringLength(7)]
     public string Rating { get; set; } = null!;
 
+    [Column("score", TypeName = "int(11)")]
+    public int Score { get; set; }
+
     [Column("feedback")]
     [StringLength(256)]
     public string? Feedback { get; set; }
@@ -32,13 +35,15 @@ public partial class PlotReview
     [Column("review_date", TypeName = "datetime")]
     public DateTime ReviewDate { get; set; }
 
+    [Column("split_score", TypeName = "int(11)")]
+    public int? SplitScore { get; set; }
+
     [ForeignKey("PlotId")]
     [InverseProperty("PlotReviews")]
     public virtual Plot Plot { get; set; } = null!;
 
-    [ForeignKey("ReviewId")]
-    [InverseProperty("Reviews")]
-    public virtual ICollection<ReviewToggleCriterion> CriteriaNames { get; set; } = new List<ReviewToggleCriterion>();
+    [InverseProperty("Review")]
+    public virtual ICollection<ReviewContainsToggleCriterion> ReviewContainsToggleCriteria { get; set; } = new List<ReviewContainsToggleCriterion>();
 
     [ForeignKey("ReviewId")]
     [InverseProperty("Reviews")]

@@ -46,6 +46,7 @@ public class MigrationService(PlotSystemContext v1Context, PlotSystemV2Context v
         await v2Context.SaveChangesAsync();
         Console.WriteLine("Created System info...");
     }
+
     private async Task CreateDefaultToggleCriteria()
     {
         v2Context.ReviewToggleCriteria.RemoveRange(v2Context.ReviewToggleCriteria);
@@ -243,7 +244,7 @@ public class MigrationService(PlotSystemContext v1Context, PlotSystemV2Context v
                 PlotType = builder.SettingPlotType ?? 1,
                 BuildTeams = reviewerTeams
             };
-            
+
             newBuilders.Add(newBuilder);
         }
 
@@ -305,7 +306,7 @@ public class MigrationService(PlotSystemContext v1Context, PlotSystemV2Context v
                 CreatedBy = plot.CreatePlayer,
                 CreateDate = plot.CreateDate,
             };
-            
+
             if (plot.MemberUuids != null)
             {
                 List<Builder> members = [];
@@ -313,8 +314,10 @@ public class MigrationService(PlotSystemContext v1Context, PlotSystemV2Context v
                 {
                     members.Add(v2Context.Builders.Single(b => b.Uuid == member));
                 }
+
                 newPlot.Uus = members;
             }
+
             newPlots.Add(newPlot);
         }
 
@@ -349,19 +352,25 @@ public class MigrationService(PlotSystemContext v1Context, PlotSystemV2Context v
 
         foreach (var review in v1Context.PlotsystemReviews)
         {
-            var plotId = v1Context.PlotsystemPlots.FirstOrDefault(p1 => p1.ReviewId == review.Id)?.Id;
-            if (plotId == null || !v2Context.Plots.Any(p => p.PlotId == plotId)) continue;
+            var plot = v1Context.PlotsystemPlots.FirstOrDefault(p1 => p1.ReviewId == review.Id);
+            if (plot == null || !v2Context.Plots.Any(p => p.PlotId == plot.Id)) continue;
+
+            var memberCount = 1;
+            if (plot.MemberUuids != null)
+            {
+                memberCount += plot.MemberUuids.Split(",").Length;
+            }
 
             newReviews.Add(new PlotReview()
             {
                 ReviewId = review.Id,
-                PlotId = (int)plotId,
+                PlotId = plot.Id,
                 Rating = review.Rating,
-                // TODO: score
+                Score = (int)plot.Score!,
                 Feedback = review.Feedback,
                 ReviewedBy = review.ReviewerUuid,
                 ReviewDate = review.ReviewDate,
-                // TODO: split score
+                SplitScore = memberCount == 1 ? null : (int)plot.Score! / memberCount
             });
         }
 
