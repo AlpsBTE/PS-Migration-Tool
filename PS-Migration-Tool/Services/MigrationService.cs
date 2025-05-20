@@ -1,5 +1,4 @@
 ﻿using System.Globalization;
-using System.Text;
 using Microsoft.EntityFrameworkCore;
 using PS_Migration_Tool.Model.DatabaseV2;
 using PS_Migration_Tool.Models;
@@ -183,7 +182,7 @@ public class MigrationService(PlotSystemContext v1Context, PlotSystemV2Context v
 
         v2Context.Countries.AddRange(newCountries);
         await v2Context.SaveChangesAsync();
-        Console.WriteLine($"Migrated {newCountries.Count} countries.");
+        Console.WriteLine($"Migrated {newCountries.Count} countries...");
     }
 
     private async Task MigrateCityProjects()
@@ -192,8 +191,8 @@ public class MigrationService(PlotSystemContext v1Context, PlotSystemV2Context v
 
         var newCityProjects = new List<CityProject>();
         foreach (var city in v1Context.PlotsystemCityProjects
-                     .Include(plotsystemCityProject => plotsystemCityProject.Country!)
-                     .ThenInclude(plotsystemCountry => plotsystemCountry.Server!)
+                     .Include(plotsystemCityProject => plotsystemCityProject.Country)
+                     .ThenInclude(plotsystemCountry => plotsystemCountry.Server)
                      .Include(plotsystemCityProject => plotsystemCityProject.Country).ThenInclude(plotsystemCountry =>
                          plotsystemCountry.PlotsystemBuildteamHasCountries))
         {
@@ -211,7 +210,7 @@ public class MigrationService(PlotSystemContext v1Context, PlotSystemV2Context v
 
         v2Context.CityProjects.AddRange(newCityProjects);
         await v2Context.SaveChangesAsync();
-        Console.WriteLine($"Migrated {newCityProjects.Count} city projects.");
+        Console.WriteLine($"Migrated {newCityProjects.Count} city projects...");
     }
 
     private async Task MigrateBuilders()
@@ -225,7 +224,7 @@ public class MigrationService(PlotSystemContext v1Context, PlotSystemV2Context v
         {
             if (newBuilders.Any(b => b.Name.Contains(builder.Name)))
             {
-                Console.WriteLine($"Builder {builder.Name} already exists.");
+                Console.WriteLine($"Builder {builder.Name} already exists!");
                 continue;
             }
 
@@ -288,7 +287,6 @@ public class MigrationService(PlotSystemContext v1Context, PlotSystemV2Context v
 
         foreach (var plot in v1Context.PlotsystemPlots)
         {
-            if (plot.Pasted == 0) continue;
             var newPlot = new Plot()
             {
                 PlotId = plot.Id,
@@ -297,10 +295,10 @@ public class MigrationService(PlotSystemContext v1Context, PlotSystemV2Context v
                 OwnerUuid = plot.OwnerUuid,
                 Status = plot.Status,
                 OutlineBounds = plot.Outline!,
-                InitialSchematic = Encoding.ASCII.GetBytes("OUTDATED_SCHEMATIC"),
-                CompleteSchematic = Encoding.ASCII.GetBytes("OUTDATED_SCHEMATIC"),
+                InitialSchematic = "OUTDATED_SCHEMATIC"u8.ToArray(),
+                CompleteSchematic = "OUTDATED_SCHEMATIC"u8.ToArray(),
                 LastActivityDate = plot.LastActivity,
-                IsPasted = true,
+                IsPasted = plot.Pasted != 0,
                 PlotVersion = plot.Version ?? 1,
                 PlotType = plot.Type,
                 CreatedBy = plot.CreatePlayer,
