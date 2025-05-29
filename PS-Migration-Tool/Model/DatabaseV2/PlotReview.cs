@@ -33,9 +33,6 @@ public partial class PlotReview
     [Column("review_date", TypeName = "datetime")]
     public DateTime ReviewDate { get; set; }
 
-    [Column("split_score", TypeName = "int(11)")]
-    public int? SplitScore { get; set; }
-
     [ForeignKey("PlotId")]
     [InverseProperty("PlotReviews")]
     public virtual Plot Plot { get; set; } = null!;

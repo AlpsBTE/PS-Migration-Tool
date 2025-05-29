@@ -353,12 +353,6 @@ public class MigrationService(PlotSystemContext v1Context, PlotSystemV2Context v
             var plot = v1Context.PlotsystemPlots.FirstOrDefault(p1 => p1.ReviewId == review.Id);
             if (plot == null || !v2Context.Plots.Any(p => p.PlotId == plot.Id)) continue;
 
-            var memberCount = 1;
-            if (plot.MemberUuids != null)
-            {
-                memberCount += plot.MemberUuids.Split(",").Length;
-            }
-
             newReviews.Add(new PlotReview()
             {
                 ReviewId = review.Id,
@@ -368,7 +362,6 @@ public class MigrationService(PlotSystemContext v1Context, PlotSystemV2Context v
                 Feedback = review.Feedback,
                 ReviewedBy = review.ReviewerUuid,
                 ReviewDate = review.ReviewDate,
-                SplitScore = memberCount == 1 ? null : (int)plot.Score! / memberCount
             });
         }
 
