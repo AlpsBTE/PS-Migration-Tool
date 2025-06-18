@@ -1,11 +1,12 @@
 ﻿using System.Globalization;
 using Microsoft.EntityFrameworkCore;
+using PS_Migration_Tool.Helpers;
 using PS_Migration_Tool.Model.DatabaseV2;
 using PS_Migration_Tool.Models;
 
 namespace PS_Migration_Tool.Services;
 
-public class MigrationService(PlotSystemContext v1Context, PlotSystemV2Context v2Context)
+internal sealed class MigrationService(PlotSystemContext v1Context, PlotSystemV2Context v2Context)
 {
     private readonly Dictionary<int, string> _countryIdConversions = new();
     private readonly Dictionary<int, string> _cityProjectIdConversions = new();
@@ -35,7 +36,7 @@ public class MigrationService(PlotSystemContext v1Context, PlotSystemV2Context v
     private async Task CreateSystemInfo()
     {
         v2Context.SystemInfos.RemoveRange(v2Context.SystemInfos);
-        v2Context.SystemInfos.Add(new SystemInfo()
+        v2Context.SystemInfos.Add(new SystemInfo
         {
             SystemId = 1,
             DbVersion = 2.0,
@@ -94,24 +95,24 @@ public class MigrationService(PlotSystemContext v1Context, PlotSystemV2Context v
         ];
         v2Context.ReviewToggleCriteria.AddRange(toggleCriteria);
         await v2Context.SaveChangesAsync();
-        Console.WriteLine($"Created {toggleCriteria.Count()} default toggle criteria...");
+        Console.WriteLine($"Created {toggleCriteria.Count} default toggle criteria...");
     }
 
     private async Task MigrateBuildTeams()
     {
-        v2Context.BuildTeams.RemoveRange(v2Context.BuildTeams.Include(bt => bt.CriteriaNames));
+        v2Context.BuildTeams.RemoveRange(v2Context.BuildTeams.Include(static bt => bt.CriteriaNames));
 
         var newBuildTeams = new List<BuildTeam>();
         foreach (var bt in v1Context.PlotsystemBuildteams
-                     .Include(plotsystemBuildteam => plotsystemBuildteam.ApiKey))
+                     .Include(static plotsystemBuildteam => plotsystemBuildteam.ApiKey))
         {
-            var newBuildTeam = new BuildTeam()
+            var newBuildTeam = new BuildTeam
             {
                 BuildTeamId = bt.Id,
                 Name = bt.Name,
                 ApiKey = bt.ApiKey?.ApiKey,
                 ApiCreateDate = bt.ApiKey?.CreatedAt,
-                CriteriaNames = v2Context.ReviewToggleCriteria.ToList()
+                CriteriaNames = await v2Context.ReviewToggleCriteria.ToListAsync()
             };
             newBuildTeams.Add(newBuildTeam);
         }
@@ -124,19 +125,19 @@ public class MigrationService(PlotSystemContext v1Context, PlotSystemV2Context v
     private async Task MigrateServers()
     {
         v2Context.Servers.RemoveRange(v2Context.Servers);
-        var newServers = v1Context.PlotsystemServers
-            .Include(plotsystemServer => plotsystemServer.PlotsystemCountries)
-            .ThenInclude(plotsystemCountry => plotsystemCountry.PlotsystemBuildteamHasCountries)
-            .Select(server => new Server()
+        var newServers = await v1Context.PlotsystemServers
+            .Include(static plotsystemServer => plotsystemServer.PlotsystemCountries)
+            .ThenInclude(static plotsystemCountry => plotsystemCountry.PlotsystemBuildteamHasCountries)
+            .Select(static server => new Server
             {
                 ServerName = server.Name,
                 BuildTeamId = server.PlotsystemCountries.First().PlotsystemBuildteamHasCountries.First().BuildteamId
             })
-            .ToList();
+            .ToListAsync();
 
         v2Context.Servers.AddRange(newServers);
         await v2Context.SaveChangesAsync();
-        Console.WriteLine($"Migrated {v2Context.Servers.Count()} servers...");
+        Console.WriteLine($"Migrated {await v2Context.Servers.CountAsync()} servers...");
     }
 
     private async Task MigrateCountries()
@@ -172,7 +173,7 @@ public class MigrationService(PlotSystemContext v1Context, PlotSystemV2Context v
             };
 
             _countryIdConversions.Add(country.Id, countryCode);
-            newCountries.Add(new Country()
+            newCountries.Add(new Country
             {
                 CountryCode = countryCode,
                 Continent = newContinent,
@@ -191,14 +192,14 @@ public class MigrationService(PlotSystemContext v1Context, PlotSystemV2Context v
 
         var newCityProjects = new List<CityProject>();
         foreach (var city in v1Context.PlotsystemCityProjects
-                     .Include(plotsystemCityProject => plotsystemCityProject.Country)
-                     .ThenInclude(plotsystemCountry => plotsystemCountry.Server)
-                     .Include(plotsystemCityProject => plotsystemCityProject.Country).ThenInclude(plotsystemCountry =>
+                     .Include(static plotsystemCityProject => plotsystemCityProject.Country)
+                     .ThenInclude(static plotsystemCountry => plotsystemCountry.Server)
+                     .Include(static plotsystemCityProject => plotsystemCityProject.Country).ThenInclude(static plotsystemCountry =>
                          plotsystemCountry.PlotsystemBuildteamHasCountries))
         {
-            var cityProjectId = city.Name.ToLower().Replace(" ", "-");
+            var cityProjectId = city.Name.ToLower().Replace(" ", "-").RemoveDiacritics();
             _cityProjectIdConversions.Add(city.Id, cityProjectId);
-            newCityProjects.Add(new CityProject()
+            newCityProjects.Add(new CityProject
             {
                 CityProjectId = cityProjectId,
                 BuildTeamId = city.Country.PlotsystemBuildteamHasCountries.First().BuildteamId,
@@ -215,11 +216,11 @@ public class MigrationService(PlotSystemContext v1Context, PlotSystemV2Context v
 
     private async Task MigrateBuilders()
     {
-        v2Context.Builders.RemoveRange(v2Context.Builders.Include(b => b.BuildTeams));
+        v2Context.Builders.RemoveRange(v2Context.Builders.Include(static b => b.BuildTeams));
 
         var newBuilders = new List<Builder>();
-        foreach (var builder in v1Context.PlotsystemBuilders.Include(plotsystemBuilder =>
-                     plotsystemBuilder.PlotsystemBuilderIsReviewers).ThenInclude(plotsystemBuilderIsReviewer =>
+        foreach (var builder in v1Context.PlotsystemBuilders.Include(static plotsystemBuilder =>
+                     plotsystemBuilder.PlotsystemBuilderIsReviewers).ThenInclude(static plotsystemBuilderIsReviewer =>
                      plotsystemBuilderIsReviewer.Buildteam))
         {
             if (newBuilders.Any(b => b.Name.Contains(builder.Name)))
@@ -232,7 +233,7 @@ public class MigrationService(PlotSystemContext v1Context, PlotSystemV2Context v
             reviewerTeams.AddRange(builder.PlotsystemBuilderIsReviewers
                 .Select(reviewer => v2Context.BuildTeams.First(bt => bt.BuildTeamId == reviewer.Buildteam.Id)));
 
-            var newBuilder = new Builder()
+            var newBuilder = new Builder
             {
                 Uuid = builder.Uuid,
                 Name = builder.Name,
@@ -249,7 +250,7 @@ public class MigrationService(PlotSystemContext v1Context, PlotSystemV2Context v
 
         v2Context.Builders.AddRange(newBuilders);
         await v2Context.SaveChangesAsync();
-        Console.WriteLine($"Migrated {v2Context.Builders.Count()} builders...");
+        Console.WriteLine($"Migrated {await v2Context.Builders.CountAsync()} builders...");
     }
 
     private async Task MigrateDifficulties()
@@ -267,7 +268,7 @@ public class MigrationService(PlotSystemContext v1Context, PlotSystemV2Context v
             };
 
             _difficultyConversions.Add(difficulty.Id, difficultyId);
-            newDifficulties.Add(new PlotDifficulty()
+            newDifficulties.Add(new PlotDifficulty
             {
                 DifficultyId = difficultyId,
                 Multiplier = (decimal)difficulty.Multiplier,
@@ -282,12 +283,12 @@ public class MigrationService(PlotSystemContext v1Context, PlotSystemV2Context v
 
     private async Task MigratePlots()
     {
-        v2Context.Plots.RemoveRange(v2Context.Plots.Include(p => p.Uus));
+        v2Context.Plots.RemoveRange(v2Context.Plots.Include(static p => p.Uus));
         var newPlots = new List<Plot>();
 
         foreach (var plot in v1Context.PlotsystemPlots)
         {
-            var newPlot = new Plot()
+            var newPlot = new Plot
             {
                 PlotId = plot.Id,
                 CityProjectId = _cityProjectIdConversions[plot.CityProjectId],
@@ -310,7 +311,7 @@ public class MigrationService(PlotSystemContext v1Context, PlotSystemV2Context v
                 List<Builder> members = [];
                 foreach (var member in plot.MemberUuids?.Split(",")!)
                 {
-                    members.Add(v2Context.Builders.Single(b => b.Uuid == member));
+                    members.Add(await v2Context.Builders.SingleAsync(b => b.Uuid == member));
                 }
 
                 newPlot.Uus = members;
@@ -321,13 +322,13 @@ public class MigrationService(PlotSystemContext v1Context, PlotSystemV2Context v
 
         v2Context.Plots.AddRange(newPlots);
         await v2Context.SaveChangesAsync();
-        Console.WriteLine($"Migrated {v2Context.Plots.Count()} plots...");
+        Console.WriteLine($"Migrated {await v2Context.Plots.CountAsync()} plots...");
     }
 
     private async Task MigrateTutorials()
     {
         v2Context.Tutorials.RemoveRange(v2Context.Tutorials);
-        var newTutorials = v1Context.PlotsystemPlotsTutorials.Select(tutorial => new Tutorial()
+        var newTutorials = await v1Context.PlotsystemPlotsTutorials.Select(static tutorial => new Tutorial
             {
                 TutorialId = tutorial.TutorialId,
                 Uuid = tutorial.PlayerUuid,
@@ -336,11 +337,11 @@ public class MigrationService(PlotSystemContext v1Context, PlotSystemV2Context v
                 FirstStageStartDate = tutorial.CreateDate,
                 LastStageCompleteDate = tutorial.LastStageCompleteDate
             })
-            .ToList();
+            .ToListAsync();
 
         v2Context.Tutorials.AddRange(newTutorials);
         await v2Context.SaveChangesAsync();
-        Console.WriteLine($"Migrated {v2Context.Tutorials.Count()} tutorials...");
+        Console.WriteLine($"Migrated {await v2Context.Tutorials.CountAsync()} tutorials...");
     }
 
     private async Task MigrateReviews()
@@ -350,10 +351,10 @@ public class MigrationService(PlotSystemContext v1Context, PlotSystemV2Context v
 
         foreach (var review in v1Context.PlotsystemReviews)
         {
-            var plot = v1Context.PlotsystemPlots.FirstOrDefault(p1 => p1.ReviewId == review.Id);
-            if (plot == null || !v2Context.Plots.Any(p => p.PlotId == plot.Id)) continue;
+            var plot = await v1Context.PlotsystemPlots.FirstOrDefaultAsync(p1 => p1.ReviewId == review.Id);
+            if (plot == null || !await v2Context.Plots.AnyAsync(p => p.PlotId == plot.Id)) continue;
 
-            newReviews.Add(new PlotReview()
+            newReviews.Add(new PlotReview
             {
                 ReviewId = review.Id,
                 PlotId = plot.Id,
@@ -367,6 +368,6 @@ public class MigrationService(PlotSystemContext v1Context, PlotSystemV2Context v
 
         v2Context.PlotReviews.AddRange(newReviews);
         await v2Context.SaveChangesAsync();
-        Console.WriteLine($"Migrated {v2Context.PlotReviews.Count()} reviews...");
+        Console.WriteLine($"Migrated {await v2Context.PlotReviews.CountAsync()} reviews...");
     }
 }
