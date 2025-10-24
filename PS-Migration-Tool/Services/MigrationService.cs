@@ -124,7 +124,10 @@ internal sealed class MigrationService(PlotSystemContext v1Context, PlotSystemV2
 
     private async Task MigrateServers()
     {
-        v2Context.Servers.RemoveRange(v2Context.Servers);
+        v2Context.RemoveRange(v2Context.CityProjects);
+        v2Context.RemoveRange(v2Context.Servers);
+        await v2Context.SaveChangesAsync();
+        
         var newServers = await v1Context.PlotsystemServers
             .Include(static plotsystemServer => plotsystemServer.PlotsystemCountries)
             .ThenInclude(static plotsystemCountry => plotsystemCountry.PlotsystemBuildteamHasCountries)
@@ -149,14 +152,13 @@ internal sealed class MigrationService(PlotSystemContext v1Context, PlotSystemV2
         {
             var cultureInfo = CultureInfo.GetCultures(CultureTypes.SpecificCultures)
                 .FirstOrDefault(c => c.EnglishName.Contains(country.Name));
+            
             if (cultureInfo == null)
             {
-                Console.WriteLine($"Could not find ISO code for {country.Name}!");
-                continue;
+                Console.WriteLine($"Could not find ISO code for {country.Name} using id as code instead!");
             }
-
-            var countryCode = new RegionInfo(cultureInfo.TextInfo.CultureName).TwoLetterISORegionName;
-
+            var countryCode = cultureInfo == null ? country.Id.ToString() : new RegionInfo(cultureInfo.TextInfo.CultureName).TwoLetterISORegionName;;
+            
             if (newCountries.Any(c => c.CountryCode == countryCode))
             {
                 Console.WriteLine($"Country {countryCode} already exists!");
@@ -219,11 +221,11 @@ internal sealed class MigrationService(PlotSystemContext v1Context, PlotSystemV2
         v2Context.Builders.RemoveRange(v2Context.Builders.Include(static b => b.BuildTeams));
 
         var newBuilders = new List<Builder>();
-        foreach (var builder in v1Context.PlotsystemBuilders.Include(static plotsystemBuilder =>
-                     plotsystemBuilder.PlotsystemBuilderIsReviewers).ThenInclude(static plotsystemBuilderIsReviewer =>
-                     plotsystemBuilderIsReviewer.Buildteam))
+        foreach (var builder in v1Context.PlotsystemBuilders
+                     .Include(static plotsystemBuilder => plotsystemBuilder.PlotsystemBuilderIsReviewers)
+                     .ThenInclude(static plotsystemBuilderIsReviewer => plotsystemBuilderIsReviewer.Buildteam))
         {
-            if (newBuilders.Any(b => b.Name.Contains(builder.Name)))
+            if (newBuilders.Any(b => b.Name.Equals(builder.Name)))
             {
                 Console.WriteLine($"Builder {builder.Name} already exists!");
                 continue;
@@ -283,11 +285,18 @@ internal sealed class MigrationService(PlotSystemContext v1Context, PlotSystemV2
 
     private async Task MigratePlots()
     {
-        v2Context.Plots.RemoveRange(v2Context.Plots.Include(static p => p.Uus));
+        v2Context.RemoveRange(v2Context.Plots.Include(static p => p.Uus));
+        await v2Context.SaveChangesAsync();
+        
         var newPlots = new List<Plot>();
 
         foreach (var plot in v1Context.PlotsystemPlots)
         {
+            if (plot.OwnerUuid != null && !v2Context.Builders.Any(b => b.Uuid.Equals(plot.OwnerUuid)))
+            {
+                Console.WriteLine("Could not find builder for uuid " + plot.OwnerUuid);
+                continue;
+            }
             var newPlot = new Plot
             {
                 PlotId = plot.Id,
